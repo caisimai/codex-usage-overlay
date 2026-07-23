@@ -1,0 +1,20 @@
+{
+  "name": "codex-usage-overlay",
+  "version": "0.1.0",
+  "description": "A local macOS overlay that shows remaining Codex usage above the ChatGPT/Codex profile row.",
+  "author": {
+    "name": "Local developer"
+  },
+  "license": "MIT",
+  "keywords": ["codex", "usage", "quota", "macos", "overlay"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Codex Usage Overlay",
+    "shortDescription": "Show remaining Codex usage above the profile row.",
+    "longDescription": "A privacy-first macOS companion that reads Codex rate limits through the local App Server and renders a small overlay without modifying ChatGPT.app.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": ["Interactive"],
+    "defaultPrompt": ["Install or troubleshoot Codex Usage Overlay."]
+  }
+}
