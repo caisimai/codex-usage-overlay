@@ -2,6 +2,8 @@ import AppKit
 import Foundation
 
 final class AppServerClient {
+    private static let fallbackRefreshInterval: TimeInterval = 180
+
     var onSnapshot: ((UsageSnapshot) -> Void)?
     var onError: ((String) -> Void)?
 
@@ -14,6 +16,7 @@ final class AppServerClient {
     private var nextRequestID = 1
     private var initialized = false
     private var stopped = false
+    private var latestSnapshot: UsageSnapshot?
 
     func start() {
         queue.async { [weak self] in
@@ -34,6 +37,7 @@ final class AppServerClient {
             process = nil
             inputHandle = nil
             initialized = false
+            latestSnapshot = nil
         }
     }
 
@@ -63,6 +67,7 @@ final class AppServerClient {
                 self.process = nil
                 self.inputHandle = nil
                 self.initialized = false
+                self.latestSnapshot = nil
                 self.refreshTimer?.cancel()
                 self.refreshTimer = nil
                 guard !self.stopped else { return }
@@ -132,7 +137,8 @@ final class AppServerClient {
 
         // Handles both the response to account/rateLimits/read and the
         // account/rateLimits/updated notification when the server emits it.
-        if let snapshot = UsageParser.parse(json: json) {
+        if let snapshot = UsageParser.parse(json: json, mergingWith: latestSnapshot) {
+            latestSnapshot = snapshot
             DispatchQueue.main.async { [weak self] in self?.onSnapshot?(snapshot) }
         }
     }
@@ -140,7 +146,10 @@ final class AppServerClient {
     private func beginRefreshTimer() {
         refreshTimer?.cancel()
         let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now() + 300, repeating: 300)
+        timer.schedule(
+            deadline: .now() + Self.fallbackRefreshInterval,
+            repeating: Self.fallbackRefreshInterval
+        )
         timer.setEventHandler { [weak self] in self?.requestSnapshot() }
         timer.resume()
         refreshTimer = timer

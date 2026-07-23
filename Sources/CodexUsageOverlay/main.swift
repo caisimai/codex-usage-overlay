@@ -6,6 +6,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private let client = AppServerClient()
     private let tracker = ChatGPTWindowTracker()
     private let overlay = OverlayController()
+    private var workspaceObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -29,11 +30,27 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.client.refreshNow()
         }
 
+        workspaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                    as? NSRunningApplication,
+                  application.bundleIdentifier == "com.openai.codex"
+                    || application.bundleIdentifier == "com.openai.chatgpt"
+            else { return }
+            self?.client.refreshNow()
+        }
+
         client.start()
         tracker.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if let workspaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(workspaceObserver)
+        }
         tracker.stop()
         client.stop()
     }

@@ -6,7 +6,7 @@
 
 - 使用 Codex 内置 `codex app-server` 的 `account/rateLimits/read`；
 - 优先处理可用的 `account/rateLimits/updated` 通知；
-- 每 5 分钟轮询一次，不因悬浮窗移动或倒计时重绘而请求额度；
+- 每 3 分钟兜底刷新一次，切回 Codex 时立即刷新，不因悬浮窗移动或倒计时重绘而请求额度；
 - 在用户名同行右侧显示紧凑的“周额度剩余 XX%”标签；
 - 最小化和恢复时使用淡出/淡入动画，不遮挡上方个人信息区域；
 - `resetsAt` 倒计时在本地计算；

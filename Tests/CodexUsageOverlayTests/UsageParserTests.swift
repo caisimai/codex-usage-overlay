@@ -50,6 +50,40 @@ final class UsageParserTests: XCTestCase {
         XCTAssertEqual(snapshot?.summaryRemainingPercent, 90)
     }
 
+    func testMergesSparseRateLimitNotification() {
+        let initial: [String: Any] = [
+            "result": [
+                "rateLimits": [
+                    "primary": [
+                        "usedPercent": 35,
+                        "windowDurationMins": 300
+                    ],
+                    "secondary": [
+                        "usedPercent": 62,
+                        "windowDurationMins": 10_080
+                    ]
+                ]
+            ]
+        ]
+        let update: [String: Any] = [
+            "method": "account/rateLimits/updated",
+            "params": [
+                "rateLimits": [
+                    "secondary": [
+                        "usedPercent": 70,
+                        "windowDurationMins": 10_080
+                    ]
+                ]
+            ]
+        ]
+
+        let initialSnapshot = UsageParser.parse(json: initial)
+        let mergedSnapshot = UsageParser.parse(json: update, mergingWith: initialSnapshot)
+
+        XCTAssertEqual(mergedSnapshot?.session?.remainingPercent, 65)
+        XCTAssertEqual(mergedSnapshot?.weekly?.remainingPercent, 30)
+    }
+
     func testIgnoresIncompleteWindow() {
         let json: [String: Any] = [
             "result": [

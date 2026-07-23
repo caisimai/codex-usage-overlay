@@ -30,7 +30,7 @@ struct UsageSnapshot {
 }
 
 enum UsageParser {
-    static func parse(json: [String: Any]) -> UsageSnapshot? {
+    static func parse(json: [String: Any], mergingWith previous: UsageSnapshot? = nil) -> UsageSnapshot? {
         let payload: [String: Any]
         if let result = json["result"] as? [String: Any] {
             payload = result
@@ -52,12 +52,36 @@ enum UsageParser {
             snapshots = [rateLimits]
         }
 
-        let rows = snapshots
+        var rows = snapshots
             .flatMap(makeRows)
             .sorted {
                 if $0.isWeekly != $1.isWeekly { return !$0.isWeekly }
                 return $0.windowDurationMinutes < $1.windowDurationMinutes
             }
+
+        // account/rateLimits/updated is a sparse rolling update. Preserve
+        // windows that were not included in the notification and replace only
+        // the windows that arrived in the new payload.
+        if json["method"] as? String == "account/rateLimits/updated",
+           let previous,
+           !rows.isEmpty {
+            var mergedRows = previous.rows
+            for row in rows {
+                if let index = mergedRows.firstIndex(where: {
+                    $0.isWeekly == row.isWeekly
+                        && $0.windowDurationMinutes == row.windowDurationMinutes
+                }) {
+                    mergedRows[index] = row
+                } else {
+                    mergedRows.append(row)
+                }
+            }
+            rows = mergedRows.sorted {
+                if $0.isWeekly != $1.isWeekly { return !$0.isWeekly }
+                return $0.windowDurationMinutes < $1.windowDurationMinutes
+            }
+        }
+
         guard !rows.isEmpty else { return nil }
         return UsageSnapshot(rows: rows, updatedAt: Date())
     }
