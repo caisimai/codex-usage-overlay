@@ -12,6 +12,7 @@
 - `resetsAt` 倒计时在本地计算；
 - 使用 macOS Accessibility API 跟随用户名/头像行；
 - 位置检查采用 Accessibility 事件驱动，静止时不轮询窗口位置；
+- ChatGPT/Codex 退出、重启或新建窗口后自动重新绑定跟随目标；
 - 找不到辅助功能元素时回退到左下角固定位置；
 - 不修改、不重签 ChatGPT.app/Codex.app；
 - 不读取或持久化 Token、Cookie、邮箱或使用历史；

@@ -20,14 +20,23 @@ final class ChatGPTWindowTracker {
             NSWorkspace.didActivateApplicationNotification,
             NSWorkspace.didHideApplicationNotification,
             NSWorkspace.didUnhideApplicationNotification,
-            NSWorkspace.activeSpaceDidChangeNotification
+            NSWorkspace.activeSpaceDidChangeNotification,
+            NSWorkspace.didLaunchApplicationNotification,
+            NSWorkspace.didTerminateApplicationNotification
         ]
         workspaceObserverTokens = workspaceNotifications.map { name in
-            workspaceCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                self?.handleWorkspaceChange()
+            workspaceCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                    as? NSRunningApplication
+                let isCodexLifecycleEvent = name == NSWorkspace.didLaunchApplicationNotification
+                    || name == NSWorkspace.didTerminateApplicationNotification
+                guard !isCodexLifecycleEvent
+                    || Self.isCodexApplication(application?.bundleIdentifier)
+                else { return }
+                self?.handleWorkspaceChange(forceRebind: isCodexLifecycleEvent)
             }
         }
-        handleWorkspaceChange()
+        handleWorkspaceChange(forceRebind: true)
     }
 
     func stop() {
@@ -40,7 +49,7 @@ final class ChatGPTWindowTracker {
         hasPublishedPlacement = false
     }
 
-    private func handleWorkspaceChange() {
+    private func handleWorkspaceChange(forceRebind: Bool = false) {
         guard let frontmost = NSWorkspace.shared.frontmostApplication,
               Self.isCodexApplication(frontmost.bundleIdentifier)
         else {
@@ -49,16 +58,25 @@ final class ChatGPTWindowTracker {
             return
         }
 
-        if observedProcessID != frontmost.processIdentifier {
+        if forceRebind
+            || observedProcessID != frontmost.processIdentifier
+            || accessibilityObserver == nil {
             attachAccessibilityObserver(to: frontmost.processIdentifier)
         }
         refreshPlacement(forceProfileLookup: true)
     }
 
-    private func handleAccessibilityEvent() {
+    private func handleAccessibilityEvent(_ notification: CFString) {
         // Accessibility sends this callback only when the observed app/window
         // changes. Re-read the anchor while it is moving, but do not poll when
         // the window is idle.
+        let notificationName = notification as String
+        if notificationName == kAXWindowCreatedNotification
+            || notificationName == kAXUIElementDestroyedNotification
+            || accessibilityObserver == nil {
+            handleWorkspaceChange(forceRebind: true)
+            return
+        }
         refreshPlacement(forceProfileLookup: true)
     }
 
@@ -75,7 +93,11 @@ final class ChatGPTWindowTracker {
 
         accessibilityObserver = observer
         let refcon = UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
-        let appNotifications = [kAXFocusedWindowChangedNotification, kAXUIElementDestroyedNotification]
+        let appNotifications = [
+            kAXFocusedWindowChangedNotification,
+            kAXWindowCreatedNotification,
+            kAXUIElementDestroyedNotification
+        ]
         for notification in appNotifications {
             AXObserverAddNotification(observer, application, notification as CFString, refcon)
         }
@@ -120,13 +142,15 @@ final class ChatGPTWindowTracker {
         accessibilityObserver = nil
         observedProcessID = nil
         observedWindowElements.removeAll()
+        cachedProfileFrame = nil
+        lastAccessibilityLookup = .distantPast
     }
 
-    private static let accessibilityCallback: AXObserverCallback = { _, _, _, refcon in
+    private static let accessibilityCallback: AXObserverCallback = { _, _, notification, refcon in
         guard let refcon else { return }
         let tracker = Unmanaged<ChatGPTWindowTracker>.fromOpaque(refcon).takeUnretainedValue()
         DispatchQueue.main.async {
-            tracker.handleAccessibilityEvent()
+            tracker.handleAccessibilityEvent(notification)
         }
     }
 
